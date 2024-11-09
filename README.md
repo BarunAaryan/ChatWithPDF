@@ -6,8 +6,8 @@ This innovative tool allows users to effortlessly upload PDF documents and engag
 
 
 ## Demo
+![ezgif-5-ff3cd61f9e](https://github.com/user-attachments/assets/a15a9fd7-0ecd-45ff-9cb5-e0536c66d815)
 
-Insert gif or link to demo
 
 
 ## Environment Variables
