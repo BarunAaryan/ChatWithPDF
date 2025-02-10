@@ -5,7 +5,7 @@
         "src": "main.py",
         "use": "@vercel/python",
        "config": {
-        "installCommand": "sh install.sh"
+        "installCommand": "pip install --no-deps -r requirements.txt"
       }
       }
     ],
