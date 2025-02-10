@@ -5,7 +5,7 @@ import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { Card, CardContent, CardFooter, CardHeader } from './components/ui/card';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = process.env.REACT_APP_API_URL;
 
 function App() {
   const [file, setFile] = useState(null);
