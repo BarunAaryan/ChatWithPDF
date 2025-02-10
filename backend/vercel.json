@@ -5,7 +5,7 @@
         "src": "main.py",
         "use": "@vercel/python",
        "config": {
-        "installCommand": "pip install --ignore-installed -r requirements.txt"
+        "installCommand": "sh install.sh"
       }
       }
     ],
