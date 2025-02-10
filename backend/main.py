@@ -1,7 +1,7 @@
 import os
 import logging
 from datetime import datetime
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from langchain_community.document_loaders import PyPDFLoader
@@ -14,6 +14,10 @@ from langchain.prompts import PromptTemplate
 import sqlite3
 from typing import List
 from dotenv import load_dotenv
+from apscheduler.schedulers.background import BackgroundScheduler
+import shutil
+import time
+from uuid import uuid4
 
 from sentence_transformers import SentenceTransformer
 
@@ -50,13 +54,45 @@ cursor.execute('''
     CREATE TABLE IF NOT EXISTS documents (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         filename TEXT NOT NULL,
-        upload_date DATETIME NOT NULL
+        upload_date DATETIME NOT NULL,
+        user_id TEXT NOT NULL
     )
 ''')
 conn.commit()
 
+# Add user_id column if it doesn't exist
+cursor.execute("PRAGMA table_info(documents)")
+columns = [info[1] for info in cursor.fetchall()]
+if 'user_id' not in columns:
+    cursor.execute("ALTER TABLE documents ADD COLUMN user_id TEXT NOT NULL DEFAULT ''")
+    conn.commit()
+
 # Global variable to store the current index
 current_index = None
+
+# Function to delete files older than 24 hours
+def cleanup_uploads():
+    now = time.time()
+    uploads_dir = "uploads"
+    for user_dir in os.listdir(uploads_dir):
+        user_path = os.path.join(uploads_dir, user_dir)
+        if os.path.isdir(user_path):
+            for filename in os.listdir(user_path):
+                file_path = os.path.join(user_path, filename)
+                if os.path.isfile(file_path):
+                    file_age = now - os.path.getmtime(file_path)
+                    if file_age > 24 * 3600:  # 24 hours
+                        os.remove(file_path)
+                        logger.info(f"Deleted old file: {file_path}")
+
+# Start the scheduler
+scheduler = BackgroundScheduler()
+scheduler.add_job(cleanup_uploads, 'interval', hours=1)
+scheduler.start()
+
+# Shut down the scheduler when exiting the app
+import atexit
+atexit.register(lambda: scheduler.shutdown())
 
 class Question(BaseModel):
     question: str
@@ -66,12 +102,19 @@ class Document(BaseModel):
     filename: str
     upload_date: str
 
+def get_user_id():
+    # Generate a unique user ID for each session
+    return str(uuid4())
+
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(file: UploadFile = File(...), user_id: str = Depends(get_user_id)):
     global current_index
     try:
+        user_upload_dir = os.path.join("uploads", user_id)
+        os.makedirs(user_upload_dir, exist_ok=True)
+
         if file.filename.endswith(".pdf"):
-            file_path = f"uploads/{file.filename}"
+            file_path = os.path.join(user_upload_dir, file.filename)
             with open(file_path, "wb") as buffer:
                 content = await file.read()
                 buffer.write(content)
@@ -80,8 +123,8 @@ async def upload_file(file: UploadFile = File(...)):
             
             # Store document information in the database
             cursor.execute('''
-                INSERT INTO documents (filename, upload_date) VALUES (?, ?)
-            ''', (file.filename, datetime.now().isoformat()))
+                INSERT INTO documents (filename, upload_date, user_id) VALUES (?, ?, ?)
+            ''', (file.filename, datetime.now().isoformat(), user_id))
             conn.commit()
             
             logger.info("Document info stored in database")
@@ -97,7 +140,7 @@ async def upload_file(file: UploadFile = File(...)):
             
             logger.info("Index created successfully")
             
-            return {"message": "File uploaded successfully"}
+            return {"message": "File uploaded successfully", "user_id": user_id}
         else:
             raise HTTPException(status_code=400, detail="Only PDF files are allowed")
     except Exception as e:
@@ -105,7 +148,7 @@ async def upload_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"An error occurred while processing the file: {str(e)}")
 
 @app.post("/ask")
-async def ask_question(question: Question):
+async def ask_question(question: Question, user_id: str = Depends(get_user_id)):
     global current_index
     try:
         if current_index is None:
@@ -139,9 +182,9 @@ async def ask_question(question: Question):
         raise HTTPException(status_code=500, detail=f"An error occurred while processing the question: {str(e)}")
 
 @app.get("/documents", response_model=List[Document])
-async def get_documents():
+async def get_documents(user_id: str = Depends(get_user_id)):
     try:
-        cursor.execute('SELECT * FROM documents ORDER BY upload_date DESC')
+        cursor.execute('SELECT * FROM documents WHERE user_id = ? ORDER BY upload_date DESC', (user_id,))
         documents = cursor.fetchall()
         # Log the fetched documents for debugging
         logger.info(f"Fetched documents: {documents}")

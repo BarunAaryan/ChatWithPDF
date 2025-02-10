@@ -3,4 +3,21 @@ venv/
 .venv/
 env/
 
+# Environment variables
 .env
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# SQLite database
+*.db
+
+# Logs
+*.log
+
+# Vercel configuration
+.vercel/
+
+# Uploads folder
+uploads/

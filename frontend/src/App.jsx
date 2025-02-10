@@ -12,6 +12,7 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [userId, setUserId] = useState(null);
   const fileInputRef = useRef(null);
 
   const handleFileUpload = async (event) => {
@@ -26,6 +27,7 @@ function App() {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
         console.log('Upload response:', response.data);
+        setUserId(response.data.user_id);
         setMessages([{ id: Date.now().toString(), content: 'PDF uploaded successfully. You can now ask questions about its content.', sender: 'ai' }]);
       } catch (error) {
         console.error('Error uploading file:', error.response ? error.response.data : error.message);
@@ -35,6 +37,7 @@ function App() {
     }
   };
 
+  //open file selection dialog box
   const handleUploadClick = () => {
     fileInputRef.current.click();
   };
@@ -49,7 +52,9 @@ function App() {
     setIsLoading(true);
 
     try {
-      const response = await axios.post(`${API_URL}/ask`, { question: input });
+      const response = await axios.post(`${API_URL}/ask`, { question: input }, {
+        params: { user_id: userId }
+      });
       const aiMessage = { id: (Date.now() + 1).toString(), content: response.data.answer, sender: 'ai' };
       setMessages(prev => [...prev, aiMessage]);
     } catch (error) {
@@ -65,11 +70,10 @@ function App() {
     <div className="min-h-screen bg-gray-50 p-4">
       <Card className="mx-auto max-w-[1200px] h-[90vh] flex flex-col">
         <CardHeader className="flex flex-row items-center justify-between border-b p-6">
-          {/* <h1 className="text-3xl font-bold">PDF Chat</h1> */}
           <img 
-    src="src\components\images\7833886cropped.jpg" // or import and use the image if it's in your src folder
+    src="src\components\images\7833886cropped.jpg" // logo image
     alt="PDF Chat Logo"
-    className="h-12 w-auto" // adjust height and width as needed
+    className="h-12 w-auto"
   />
           <Button 
             onClick={handleUploadClick}
